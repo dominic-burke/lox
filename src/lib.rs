@@ -2,8 +2,7 @@ mod scanner;
 mod token;
 
 pub fn run_file(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    use std::fs;
-    let source = fs::read_to_string(path)?;
+    let source = std::fs::read_to_string(path)?;
     run(source);
     Ok(())
 }
