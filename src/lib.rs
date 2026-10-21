@@ -1,5 +1,6 @@
 mod scanner;
 mod token;
+use std::io::Write;
 
 pub fn run_file(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let source = std::fs::read_to_string(path)?;
@@ -8,14 +9,12 @@ pub fn run_file(path: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn run_prompt() -> Result<(), Box<dyn std::error::Error>> {
-    use std::io::{self, Write};
-
     let mut line = String::new();
     loop {
         print!("> ");
-        io::stdout().flush()?;
+        std::io::stdout().flush()?;
         line.clear();
-        if io::stdin().read_line(&mut line)? == 0 {
+        if std::io::stdin().read_line(&mut line)? == 0 {
             break;
         }
         run(line.clone());
