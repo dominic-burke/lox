@@ -58,6 +58,10 @@ impl Scanner {
         true
     }
 
+    fn peek(&self) -> Option<char> {
+        self.source.chars().nth(self.current)
+    }
+
     fn scan_token(&mut self) -> TokenResult<()> {
         let c = self.advance();
         match c {
@@ -113,23 +117,19 @@ impl Scanner {
                 self.line += 1;
                 Ok(())
             }
-            Some('"') => {
-                self.make_string()
-            }
-            Some(c) if c.is_digit(10) => {
-                self.make_number(c)
-            }
-            Some(c) if c.is_alphabetic() => {
-                self.make_identifier(c)
-            }
+            Some('"') => self.make_string(),
+            Some(c) if c.is_digit(10) => self.make_number(c),
+            Some(c) if c.is_alphabetic() => self.make_identifier(c),
             _ => Err(TokenError::UnexpectedCharacter(c.unwrap_or('\0'), self.line).into()),
         }
     }
 
     fn make_string(&mut self) -> TokenResult<()> {
         let mut string = String::new();
+        let mut terminated = false;
         while let Some(c) = self.advance() {
             if c == '"' {
+                terminated = true;
                 break;
             }
             if c == '\n' {
@@ -137,7 +137,7 @@ impl Scanner {
             }
             string.push(c);
         }
-        if self.is_at_end() {
+        if !terminated {
             return Err(TokenError::UnterminatedString(self.line).into());
         }
         self.add_token(TokenType::String(string));
@@ -146,11 +146,13 @@ impl Scanner {
 
     fn make_number(&mut self, first_digit: char) -> TokenResult<()> {
         let mut number = first_digit.to_string();
-        while let Some(c) = self.advance() {
-            if !c.is_digit(10) && c != '.' {
+        while let Some(c) = self.peek() {
+            if c.is_digit(10) || c == '.' {
+                self.advance();
+                number.push(c);
+            } else {
                 break;
             }
-            number.push(c);
         }
         match number.parse::<f64>() {
             Ok(num) => {
@@ -163,10 +165,11 @@ impl Scanner {
 
     fn make_identifier(&mut self, first_char: char) -> TokenResult<()> {
         let mut identifier = first_char.to_string();
-        while let Some(c) = self.advance() {
+        while let Some(c) = self.peek() {
             if !c.is_alphanumeric() && c != '_' {
                 break;
             }
+            self.advance();
             identifier.push(c);
         }
         let token_type = match identifier.as_str() {
@@ -192,6 +195,7 @@ impl Scanner {
     fn skip_oneline_comment(&mut self) -> TokenResult<()> {
         while let Some(c) = self.advance() {
             if c == '\n' {
+                self.line += 1;
                 break;
             }
         }
@@ -218,5 +222,116 @@ impl Scanner {
         let text = &self.source[self.start..self.current];
         self.tokens
             .push(Token::new(kind, text.to_string(), self.line));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scan(source: &str) -> Vec<Token> {
+        Scanner::new(source.to_string()).scan_tokens()
+    }
+
+    fn token(kind: TokenType, lexeme: &str, line: usize) -> Token {
+        Token::new(kind, lexeme.to_string(), line)
+    }
+
+    #[test]
+    fn scans_single_and_double_character_tokens() {
+        let source = "( ) { } , . - + ; * ! != = == < <= > >= /";
+        let expected = vec![
+            token(TokenType::LeftParen, "(", 1),
+            token(TokenType::RightParen, ")", 1),
+            token(TokenType::LeftBrace, "{", 1),
+            token(TokenType::RightBrace, "}", 1),
+            token(TokenType::Comma, ",", 1),
+            token(TokenType::Dot, ".", 1),
+            token(TokenType::Minus, "-", 1),
+            token(TokenType::Plus, "+", 1),
+            token(TokenType::Semicolon, ";", 1),
+            token(TokenType::Star, "*", 1),
+            token(TokenType::Bang, "!", 1),
+            token(TokenType::BangEqual, "!=", 1),
+            token(TokenType::Equal, "=", 1),
+            token(TokenType::EqualEqual, "==", 1),
+            token(TokenType::Less, "<", 1),
+            token(TokenType::LessEqual, "<=", 1),
+            token(TokenType::Greater, ">", 1),
+            token(TokenType::GreaterEqual, ">=", 1),
+            token(TokenType::Slash, "/", 1),
+        ];
+
+        assert_eq!(scan(source), expected);
+    }
+
+    #[test]
+    fn scans_keywords_and_identifiers() {
+        let source = "var fun for and else if nil or print return super this while value2";
+        let expected = vec![
+            token(TokenType::Var, "var", 1),
+            token(TokenType::Fun, "fun", 1),
+            token(TokenType::For, "for", 1),
+            token(TokenType::And, "and", 1),
+            token(TokenType::Else, "else", 1),
+            token(TokenType::If, "if", 1),
+            token(TokenType::Nil, "nil", 1),
+            token(TokenType::Or, "or", 1),
+            token(TokenType::Print, "print", 1),
+            token(TokenType::Return, "return", 1),
+            token(TokenType::Super, "super", 1),
+            token(TokenType::This, "this", 1),
+            token(TokenType::While, "while", 1),
+            token(TokenType::Identifier("value2".to_string()), "value2", 1),
+        ];
+
+        assert_eq!(scan(source), expected);
+    }
+
+    #[test]
+    fn scans_literals_and_tracks_lines() {
+        let source = "123.45 \"hello\nworld\" \"\"\nname";
+        let expected = vec![
+            token(TokenType::Number(123.45), "123.45", 1),
+            token(
+                TokenType::String("hello\nworld".to_string()),
+                "\"hello\nworld\"",
+                2,
+            ),
+            token(TokenType::String(String::new()), "\"\"", 2),
+            token(TokenType::Identifier("name".to_string()), "name", 3),
+        ];
+
+        assert_eq!(scan(source), expected);
+    }
+
+    #[test]
+    fn skips_single_and_multiline_comments() {
+        let source = "print 1; // ignored\n/* ignored\n * too */ print 2;";
+        let expected = vec![
+            token(TokenType::Print, "print", 1),
+            token(TokenType::Number(1.0), "1", 1),
+            token(TokenType::Semicolon, ";", 1),
+            token(TokenType::Print, "print", 3),
+            token(TokenType::Number(2.0), "2", 3),
+            token(TokenType::Semicolon, ";", 3),
+        ];
+
+        assert_eq!(scan(source), expected);
+    }
+
+    #[test]
+    fn reports_unterminated_strings_and_comments() {
+        let mut string_scanner = Scanner::new("\"unterminated".to_string());
+        assert_eq!(
+            string_scanner.scan_token(),
+            Err(TokenError::UnterminatedString(1))
+        );
+
+        let mut comment_scanner = Scanner::new("/* unterminated".to_string());
+        assert_eq!(
+            comment_scanner.scan_token(),
+            Err(TokenError::UnterminatedComment(1))
+        );
     }
 }
