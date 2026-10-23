@@ -2,8 +2,9 @@ use crate::token::{Token, TokenError, TokenResult, TokenType};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scanner {
-    source: String,
+    source: Vec<char>,
     tokens: Vec<Token>,
+    errors: Vec<TokenError>,
     start: usize,
     current: usize,
     line: usize,
@@ -11,22 +12,24 @@ pub struct Scanner {
 impl Scanner {
     pub fn new(source: String) -> Self {
         Scanner {
-            source,
+            source: source.chars().collect::<Vec<char>>(),
             tokens: Vec::new(),
+            errors: Vec::new(),
             start: 0,
             current: 0,
             line: 1,
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
+    pub fn scan_tokens(&mut self) -> (Vec<Token>, Vec<TokenError>) {
         while !self.is_at_end() {
             self.start = self.current;
             if let Err(e) = self.scan_token() {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {}", &e);
+                self.errors.push(e);
             }
         }
-        self.tokens.clone()
+        (self.tokens.clone(), self.errors.clone())
     }
 
     fn is_at_end(&self) -> bool {
@@ -34,7 +37,7 @@ impl Scanner {
     }
 
     fn advance(&mut self) -> Option<char> {
-        match self.source.chars().nth(self.current) {
+        match self.source.get(self.current).copied() {
             Some(c) => {
                 self.current += 1;
                 Some(c)
@@ -47,8 +50,8 @@ impl Scanner {
         if self.is_at_end() {
             return false;
         }
-        if let Some(c) = self.source.chars().nth(self.current) {
-            if c != expected {
+        if let Some(c) = self.source.get(self.current) {
+            if c != &expected {
                 return false;
             }
         } else {
@@ -59,7 +62,11 @@ impl Scanner {
     }
 
     fn peek(&self) -> Option<char> {
-        self.source.chars().nth(self.current)
+        self.source.get(self.current).copied()
+    }
+
+    fn peek_next(&self) -> Option<char> {
+        self.source.get(self.current + 1).copied()
     }
 
     fn scan_token(&mut self) -> TokenResult<()> {
@@ -119,7 +126,7 @@ impl Scanner {
             }
             Some('"') => self.make_string(),
             Some(c) if c.is_digit(10) => self.make_number(c),
-            Some(c) if c.is_alphabetic() => self.make_identifier(c),
+            Some(c) if c.is_ascii_alphabetic() => self.make_identifier(c),
             _ => Err(TokenError::UnexpectedCharacter(c.unwrap_or('\0'), self.line).into()),
         }
     }
@@ -147,10 +154,18 @@ impl Scanner {
     fn make_number(&mut self, first_digit: char) -> TokenResult<()> {
         let mut number = first_digit.to_string();
         while let Some(c) = self.peek() {
-            if c.is_digit(10) || c == '.' {
+            if c.is_ascii_digit() {
                 self.advance();
                 number.push(c);
-            } else {
+             
+            } 
+            else if c == '.' && self.peek_next().is_some_and(|d| d.is_ascii_digit()) {
+                        self.advance();
+                        number.push(c);
+                        // safe unwrap because we check in self.peek_next
+                        number.push(self.advance().unwrap());
+            }
+            else {
                 break;
             }
         }
@@ -166,7 +181,7 @@ impl Scanner {
     fn make_identifier(&mut self, first_char: char) -> TokenResult<()> {
         let mut identifier = first_char.to_string();
         while let Some(c) = self.peek() {
-            if !c.is_alphanumeric() && c != '_' {
+            if !c.is_ascii_alphanumeric() && c != '_' {
                 break;
             }
             self.advance();
@@ -205,23 +220,18 @@ impl Scanner {
     fn skip_multiline_comment(&mut self) -> TokenResult<()> {
         while let Some(c) = self.advance() {
             if c == '*' && self.match_char('/') {
-                break;
-            }
-            if c == '\n' {
+                return Ok(());
+            } else if c == '\n' {
                 self.line += 1;
-            }
+            }         
         }
-        if self.is_at_end() {
-            return Err(TokenError::UnterminatedComment(self.line).into());
-        } else {
-            Ok(())
-        }
+        return Err(TokenError::UnterminatedComment(self.line).into());
     }
 
     fn add_token(&mut self, kind: TokenType) {
-        let text = &self.source[self.start..self.current];
-        self.tokens
-            .push(Token::new(kind, text.to_string(), self.line));
+        // let text = self.source[self.start..self.current].iter().collect::Vec<char>>();
+        let text = self.source[self.start..self.current].iter().collect();
+        self.tokens.push(Token::new(kind, text, self.line));
     }
 }
 
@@ -230,7 +240,7 @@ mod tests {
     use super::*;
 
     fn scan(source: &str) -> Vec<Token> {
-        Scanner::new(source.to_string()).scan_tokens()
+        Scanner::new(source.to_string()).scan_tokens().0
     }
 
     fn token(kind: TokenType, lexeme: &str, line: usize) -> Token {
@@ -333,5 +343,61 @@ mod tests {
             comment_scanner.scan_token(),
             Err(TokenError::UnterminatedComment(1))
         );
+    }
+
+    #[test]
+    fn test_func_calls_work() {
+        let mut string_scanner = Scanner::new("print(\"Hello, World!\");".to_string());
+        assert_eq!(
+            string_scanner.scan_tokens().0,
+            vec![
+                token(TokenType::Print, "print", 1),
+                token(TokenType::LeftParen, "(", 1),
+                token(
+                    TokenType::String("Hello, World!".to_string()),
+                    "\"Hello, World!\"",
+                    1
+                ),
+                token(TokenType::RightParen, ")", 1),
+                token(TokenType::Semicolon, ";", 1),
+            ]
+        );
+    }
+    #[test]
+    fn test_comment_returns_empty_no_errors() {
+        let string = String::from("/* */");
+        let mut string_scanner = Scanner::new(string);
+        assert_eq!(string_scanner.scan_tokens().0, Vec::new());
+        assert_eq!(string_scanner.scan_tokens().1, Vec::new());
+    }
+
+    #[test]
+    fn test_double_decimal() {
+        let string = String::from("123.45 1.2.3");
+        let expected_err = vec![TokenError::InvalidNumber(String::from("1.2.3"), 1)];
+        let expected_tok = vec![token(TokenType::Number(123.45), "123.45", 1)];
+        let mut string_scanner = Scanner::new(string);
+        assert_eq!(string_scanner.scan_tokens().0, expected_tok);
+        assert_eq!(string_scanner.scan_tokens().1, expected_err);
+    }
+
+    #[test]
+    fn test_unexpected_char() {
+        let string = String::from("chocolate || mint");
+        let expected_err = vec![TokenError::UnexpectedCharacter('|', 1), TokenError::UnexpectedCharacter('|', 1)];
+        let expected_tok = vec![token(TokenType::Identifier(String::from("chocolate")), "chocolate", 1), token(TokenType::Identifier(String::from("mint")), "mint", 1)];
+        let mut string_scanner = Scanner::new(string);
+        assert_eq!(string_scanner.scan_tokens().0, expected_tok);
+        assert_eq!(string_scanner.scan_tokens().1, expected_err);
+    }
+
+    #[test]
+    fn test_malformed_float() {
+        let string = String::from("1.foo");
+        let expected_err: Vec<TokenError> = Vec::new();
+        let expected_tok = vec![token(TokenType::Number(1.0), "1", 1), token(TokenType::Dot, ".", 1), token(TokenType::Identifier(String::from("foo")), "foo", 1)];
+        let mut string_scanner = Scanner::new(string);
+        assert_eq!(string_scanner.scan_tokens().0, expected_tok);
+        assert_eq!(string_scanner.scan_tokens().1, expected_err);
     }
 }

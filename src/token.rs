@@ -59,8 +59,8 @@ pub enum TokenType {
     While,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub enum TokenError{
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenError {
     UnexpectedCharacter(char, usize),
     UnterminatedString(usize),
     UnterminatedComment(usize),
@@ -72,21 +72,18 @@ impl std::error::Error for TokenError {}
 impl std::fmt::Display for TokenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenError::UnexpectedCharacter(c, line) => write!(f, "Unexpected character '{}' at line {}", c, line),
-            TokenError::UnterminatedString(line) => write!(f, "Unterminated string at line {}", line),
-            TokenError::InvalidNumber(num_str, line) => write!(f, "Invalid number '{}' at line {}", num_str, line),
-            TokenError::UnterminatedComment(line) => write!(f, "Unterminated comment at line {}", line),
-        }
-    }
-}
-
-impl std::fmt::Debug for TokenError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TokenError::UnexpectedCharacter(c, line) => write!(f, "Unexpected character '{}' at line {}", c, line),
-            TokenError::UnterminatedString(line) => write!(f, "Unterminated string at line {}", line),
-            TokenError::InvalidNumber(num_str, line) => write!(f, "Invalid number '{}' at line {}", num_str, line),
-            TokenError::UnterminatedComment(line) => write!(f, "Unterminated comment at line {}", line),
+            TokenError::UnexpectedCharacter(c, line) => {
+                write!(f, "Unexpected character '{}' at line {}", c, line)
+            }
+            TokenError::UnterminatedString(line) => {
+                write!(f, "Unterminated string at line {}", line)
+            }
+            TokenError::InvalidNumber(num_str, line) => {
+                write!(f, "Invalid number '{}' at line {}", num_str, line)
+            }
+            TokenError::UnterminatedComment(line) => {
+                write!(f, "Unterminated comment at line {}", line)
+            }
         }
     }
 }

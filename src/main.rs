@@ -1,20 +1,23 @@
+use lox::cli::{run_file, run_prompt};
 use std::env;
-use lox::{run_prompt, run_file};
+
+const EX_USAGE: i32 = 64;
+const EX_DATAERR: i32 = 1;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() > 1 {
+    if args.len() > 2 {
         eprintln!("Usage: lox <script>");
-        std::process::exit(64);
+        std::process::exit(EX_USAGE);
     } else if args.len() == 2 {
         if let Err(e) = run_file(&args[1]) {
             eprintln!("Error: {}", e);
-            std::process::exit(1);
+            std::process::exit(EX_DATAERR);
         }
     } else {
         if let Err(e) = run_prompt() {
             eprintln!("Error: {}", e);
-            std::process::exit(1);
+            std::process::exit(EX_DATAERR);
         }
     }
 }
