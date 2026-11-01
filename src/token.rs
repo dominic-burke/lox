@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt::{self, write}, io::BufWriter};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
@@ -10,6 +10,10 @@ pub struct Token {
 impl Token {
     pub fn new(kind: TokenType, lexeme: String, line: usize) -> Self {
         Token { kind, lexeme, line }
+    }
+    
+    pub fn get_kind(&self) -> &TokenType {
+        &self.kind
     }
 }
 
@@ -49,6 +53,8 @@ pub enum TokenType {
     For,
     And,
     Else,
+    True,
+    False,
     If,
     Nil,
     Or,
@@ -57,6 +63,50 @@ pub enum TokenType {
     Super,
     This,
     While,
+}
+
+impl std::fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            TokenType::And => write!(f, "and"),
+            TokenType::Bang => write!(f, "!"),
+            TokenType::BangEqual => write!(f, "!="),
+            TokenType::Comma => write!(f, ","),
+            TokenType::Dot => write!(f, "."),
+            TokenType::Else => write!(f, "else"),
+            TokenType::Equal => write!(f, "equal"),
+            TokenType::EqualEqual => write!(f, "=="),
+            TokenType::False => write!(f, "false"),
+            TokenType::For => write!(f, "for"),
+            TokenType::Fun => write!(f, "fun"),
+            TokenType::Greater => write!(f, ">"),
+            TokenType::GreaterEqual => write!(f, ">="),
+            TokenType::Identifier(id) => write!(f, "identifer: {id}"),
+            TokenType::If => write!(f, "if"),
+            TokenType::LeftBrace => write!(f, "{{"),
+            TokenType::LeftParen => write!(f, "("),
+            TokenType::Less => write!(f, "<"),
+            TokenType::LessEqual => write!(f, "<="),
+            TokenType::Minus => write!(f, "-"),
+            TokenType::Nil => write!(f, "nil"),
+            TokenType::Number(num) => write!(f, "number: {num}"),
+            TokenType::Or => write!(f, "or"),
+            TokenType::Plus => write!(f, "plus"),
+            TokenType::Print => write!(f, "print"),
+            TokenType::Return => write!(f, "return"),
+            TokenType::RightBrace => write!(f, "}}"),
+            TokenType::RightParen => write!(f, ")"),
+            TokenType::Semicolon => write!(f, ";"),
+            TokenType::Slash => write!(f, "/"),
+            TokenType::Star => write!(f, "*"),
+            TokenType::String(str) => write!(f, "string: {str}"),
+            TokenType::Super => write!(f, "super"),
+            TokenType::This => write!(f, "this"),
+            TokenType::True => write!(f, "true"),
+            TokenType::Var => write!(f, "var"),
+            TokenType::While => write!(f, "while"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

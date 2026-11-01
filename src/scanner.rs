@@ -194,6 +194,8 @@ impl Scanner {
             "and" => TokenType::And,
             "else" => TokenType::Else,
             "if" => TokenType::If,
+            "true" => TokenType::True,
+            "false" => TokenType::False,
             "nil" => TokenType::Nil,
             "or" => TokenType::Or,
             "print" => TokenType::Print,
@@ -229,7 +231,6 @@ impl Scanner {
     }
 
     fn add_token(&mut self, kind: TokenType) {
-        // let text = self.source[self.start..self.current].iter().collect::Vec<char>>();
         let text = self.source[self.start..self.current].iter().collect();
         self.tokens.push(Token::new(kind, text, self.line));
     }
