@@ -16,9 +16,8 @@ impl std::fmt::Display for ParseError {
         match &self {
             ParseError::ExpectedButNotFound(tt) => write!(f, "Wanted to find {tt} but couldn't"),
             ParseError::InvalidToken => write!(f, "Invalid token found"),
-            ParseError::UnexpectedTokenEnd => write!(f, "Tokens came to an end unexpectedly")
+            ParseError::UnexpectedTokenEnd => write!(f, "Tokens came to an end unexpectedly"),
         }
-        
     }
 }
 
@@ -35,12 +34,16 @@ impl<'a> Parser<'a> {
         self.equality()
     }
 
-    fn equality(&mut self) -> ParseResult<Expression> {
-        let mut expr = self.comparison()?;
+    fn binary(
+        &mut self,
+        ops: &[TokenType],
+        next_fn: fn(&mut Self) -> ParseResult<Expression>,
+    ) -> ParseResult<Expression> {
+        let mut expr = next_fn(&mut *self)?;
 
-        while let Some(t) = self.match_any(&[TokenType::Bang, TokenType::BangEqual]) {
+        while let Some(t) = self.match_any(ops) {
             let op = t;
-            let right = self.comparison()?;
+            let right = next_fn(&mut *self)?;
             expr = Expression::BinaryExpr {
                 left: Box::new(expr),
                 operator: op,
@@ -48,56 +51,41 @@ impl<'a> Parser<'a> {
             };
         }
         Ok(expr)
+    }
+
+    fn equality(&mut self) -> ParseResult<Expression> {
+        self.binary(
+            &[TokenType::EqualEqual, TokenType::BangEqual],
+            Self::comparison,
+        )
     }
 
     fn comparison(&mut self) -> ParseResult<Expression> {
-        let mut expr = self.term()?;
-
-        while let Some(t) = self.match_any(&[
-            TokenType::Greater,
-            TokenType::GreaterEqual,
-            TokenType::Less,
-            TokenType::LessEqual,
-        ]) {
-            let op = t;
-            let right = self.term()?;
-            expr = Expression::BinaryExpr {
-                left: Box::new(expr),
-                operator: op,
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
+        self.binary(
+            &[
+                TokenType::Greater,
+                TokenType::GreaterEqual,
+                TokenType::Less,
+                TokenType::LessEqual,
+            ],
+            Self::term,
+        )
     }
 
     fn term(&mut self) -> ParseResult<Expression> {
-        let mut expr = self.factor()?;
-
-        while let Some(t) = self.match_any(&[TokenType::Minus, TokenType::Plus]) {
-            let op = t;
-            let right = self.factor()?;
-            expr = Expression::BinaryExpr {
-                left: Box::new(expr),
-                operator: op,
-                right: Box::new(right),
-            }
-        }
-        Ok(expr)
+        self.binary(&[TokenType::Minus, TokenType::Plus], Self::factor)
     }
 
     fn factor(&mut self) -> ParseResult<Expression> {
-        let mut expr = self.unary()?;
-
-        while let Some(t) = self.match_any(&[TokenType::Slash, TokenType::Star]) {
-            let op = t;
-            let right = self.unary()?;
-            expr = Expression::BinaryExpr {
-                left: Box::new(expr),
-                operator: op,
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
+        self.binary(
+            &[
+                TokenType::Slash,
+                TokenType::Star,
+                TokenType::Plus,
+                TokenType::Minus,
+            ],
+            Self::unary,
+        )
     }
 
     fn unary(&mut self) -> ParseResult<Expression> {
