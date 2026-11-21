@@ -1,4 +1,7 @@
 pub mod cli;
-mod scanner;
-mod token;
-mod parser;
+pub mod environment;
+pub mod interpreter;
+pub mod parser;
+pub mod scanner;
+pub mod token;
+pub mod value;

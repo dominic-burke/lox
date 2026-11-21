@@ -1,4 +1,4 @@
-use std::{fmt::{self, write}, io::BufWriter};
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
@@ -11,9 +11,19 @@ impl Token {
     pub fn new(kind: TokenType, lexeme: String, line: usize) -> Self {
         Token { kind, lexeme, line }
     }
-    
+
     pub fn get_kind(&self) -> &TokenType {
         &self.kind
+    }
+
+    /// The raw source text of the token, e.g. the variable name for an
+    /// identifier or the digits for a number.
+    pub fn lexeme(&self) -> &str {
+        &self.lexeme
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
     }
 }
 
@@ -74,14 +84,14 @@ impl std::fmt::Display for TokenType {
             TokenType::Comma => write!(f, ","),
             TokenType::Dot => write!(f, "."),
             TokenType::Else => write!(f, "else"),
-            TokenType::Equal => write!(f, "equal"),
+            TokenType::Equal => write!(f, "="),
             TokenType::EqualEqual => write!(f, "=="),
             TokenType::False => write!(f, "false"),
             TokenType::For => write!(f, "for"),
             TokenType::Fun => write!(f, "fun"),
             TokenType::Greater => write!(f, ">"),
             TokenType::GreaterEqual => write!(f, ">="),
-            TokenType::Identifier(id) => write!(f, "identifer: {id}"),
+            TokenType::Identifier(id) => write!(f, "identifier: {id}"),
             TokenType::If => write!(f, "if"),
             TokenType::LeftBrace => write!(f, "{{"),
             TokenType::LeftParen => write!(f, "("),
@@ -91,7 +101,7 @@ impl std::fmt::Display for TokenType {
             TokenType::Nil => write!(f, "nil"),
             TokenType::Number(num) => write!(f, "number: {num}"),
             TokenType::Or => write!(f, "or"),
-            TokenType::Plus => write!(f, "plus"),
+            TokenType::Plus => write!(f, "+"),
             TokenType::Print => write!(f, "print"),
             TokenType::Return => write!(f, "return"),
             TokenType::RightBrace => write!(f, "}}"),
@@ -121,19 +131,26 @@ impl std::error::Error for TokenError {}
 
 impl std::fmt::Display for TokenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Same shape as ParseError and RuntimeError: message, then the line.
         match self {
-            TokenError::UnexpectedCharacter(c, line) => {
-                write!(f, "Unexpected character '{}' at line {}", c, line)
+            TokenError::UnexpectedCharacter(c, _) => {
+                write!(f, "Unexpected character '{c}'.")
             }
-            TokenError::UnterminatedString(line) => {
-                write!(f, "Unterminated string at line {}", line)
-            }
-            TokenError::InvalidNumber(num_str, line) => {
-                write!(f, "Invalid number '{}' at line {}", num_str, line)
-            }
-            TokenError::UnterminatedComment(line) => {
-                write!(f, "Unterminated comment at line {}", line)
-            }
+            TokenError::UnterminatedString(_) => write!(f, "Unterminated string."),
+            TokenError::InvalidNumber(num_str, _) => write!(f, "Invalid number '{num_str}'."),
+            TokenError::UnterminatedComment(_) => write!(f, "Unterminated comment."),
+        }?;
+        write!(f, "\n[line {}]", self.line())
+    }
+}
+
+impl TokenError {
+    pub fn line(&self) -> usize {
+        match self {
+            TokenError::UnexpectedCharacter(_, line)
+            | TokenError::UnterminatedString(line)
+            | TokenError::InvalidNumber(_, line)
+            | TokenError::UnterminatedComment(line) => *line,
         }
     }
 }

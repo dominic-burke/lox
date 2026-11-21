@@ -10,9 +10,9 @@ pub struct Scanner {
     line: usize,
 }
 impl Scanner {
-    pub fn new(source: String) -> Self {
+    pub fn new(source: impl Into<String>) -> Self {
         Scanner {
-            source: source.chars().collect::<Vec<char>>(),
+            source: source.into().chars().collect::<Vec<char>>(),
             tokens: Vec::new(),
             errors: Vec::new(),
             start: 0,
@@ -21,11 +21,19 @@ impl Scanner {
         }
     }
 
+    /// Scans the whole source, returning the tokens that were recognised
+    /// alongside any lexical errors. Calling this twice is safe: it rescans
+    /// from the start rather than appending to the previous result.
     pub fn scan_tokens(&mut self) -> (Vec<Token>, Vec<TokenError>) {
+        self.tokens.clear();
+        self.errors.clear();
+        self.start = 0;
+        self.current = 0;
+        self.line = 1;
+
         while !self.is_at_end() {
             self.start = self.current;
             if let Err(e) = self.scan_token() {
-                eprintln!("Error: {}", &e);
                 self.errors.push(e);
             }
         }
@@ -72,42 +80,42 @@ impl Scanner {
     fn scan_token(&mut self) -> TokenResult<()> {
         let c = self.advance();
         match c {
-            Some('(') => Ok(self.add_token(TokenType::LeftParen)),
-            Some(')') => Ok(self.add_token(TokenType::RightParen)),
-            Some('{') => Ok(self.add_token(TokenType::LeftBrace)),
-            Some('}') => Ok(self.add_token(TokenType::RightBrace)),
-            Some(',') => Ok(self.add_token(TokenType::Comma)),
-            Some('.') => Ok(self.add_token(TokenType::Dot)),
-            Some('-') => Ok(self.add_token(TokenType::Minus)),
-            Some('+') => Ok(self.add_token(TokenType::Plus)),
-            Some(';') => Ok(self.add_token(TokenType::Semicolon)),
-            Some('*') => Ok(self.add_token(TokenType::Star)),
+            Some('(') => self.add_token(TokenType::LeftParen),
+            Some(')') => self.add_token(TokenType::RightParen),
+            Some('{') => self.add_token(TokenType::LeftBrace),
+            Some('}') => self.add_token(TokenType::RightBrace),
+            Some(',') => self.add_token(TokenType::Comma),
+            Some('.') => self.add_token(TokenType::Dot),
+            Some('-') => self.add_token(TokenType::Minus),
+            Some('+') => self.add_token(TokenType::Plus),
+            Some(';') => self.add_token(TokenType::Semicolon),
+            Some('*') => self.add_token(TokenType::Star),
             Some('!') => {
                 if self.match_char('=') {
-                    Ok(self.add_token(TokenType::BangEqual))
+                    self.add_token(TokenType::BangEqual)
                 } else {
-                    Ok(self.add_token(TokenType::Bang))
+                    self.add_token(TokenType::Bang)
                 }
             }
             Some('=') => {
                 if self.match_char('=') {
-                    Ok(self.add_token(TokenType::EqualEqual))
+                    self.add_token(TokenType::EqualEqual)
                 } else {
-                    Ok(self.add_token(TokenType::Equal))
+                    self.add_token(TokenType::Equal)
                 }
             }
             Some('<') => {
                 if self.match_char('=') {
-                    Ok(self.add_token(TokenType::LessEqual))
+                    self.add_token(TokenType::LessEqual)
                 } else {
-                    Ok(self.add_token(TokenType::Less))
+                    self.add_token(TokenType::Less)
                 }
             }
             Some('>') => {
                 if self.match_char('=') {
-                    Ok(self.add_token(TokenType::GreaterEqual))
+                    self.add_token(TokenType::GreaterEqual)
                 } else {
-                    Ok(self.add_token(TokenType::Greater))
+                    self.add_token(TokenType::Greater)
                 }
             }
             Some('/') => {
@@ -116,7 +124,7 @@ impl Scanner {
                 } else if self.match_char('*') {
                     self.skip_multiline_comment()
                 } else {
-                    Ok(self.add_token(TokenType::Slash))
+                    self.add_token(TokenType::Slash)
                 }
             }
             Some(' ') | Some('\r') | Some('\t') => Ok(()),
@@ -125,9 +133,12 @@ impl Scanner {
                 Ok(())
             }
             Some('"') => self.make_string(),
-            Some(c) if c.is_digit(10) => self.make_number(c),
+            Some(c) if c.is_ascii_digit() => self.make_number(c),
             Some(c) if c.is_ascii_alphabetic() => self.make_identifier(c),
-            _ => Err(TokenError::UnexpectedCharacter(c.unwrap_or('\0'), self.line).into()),
+            _ => Err(TokenError::UnexpectedCharacter(
+                c.unwrap_or('\0'),
+                self.line,
+            )),
         }
     }
 
@@ -145,10 +156,9 @@ impl Scanner {
             string.push(c);
         }
         if !terminated {
-            return Err(TokenError::UnterminatedString(self.line).into());
+            return Err(TokenError::UnterminatedString(self.line));
         }
-        self.add_token(TokenType::String(string));
-        Ok(())
+        self.add_token(TokenType::String(string))
     }
 
     fn make_number(&mut self, first_digit: char) -> TokenResult<()> {
@@ -157,24 +167,18 @@ impl Scanner {
             if c.is_ascii_digit() {
                 self.advance();
                 number.push(c);
-             
-            } 
-            else if c == '.' && self.peek_next().is_some_and(|d| d.is_ascii_digit()) {
-                        self.advance();
-                        number.push(c);
-                        // safe unwrap because we check in self.peek_next
-                        number.push(self.advance().unwrap());
-            }
-            else {
+            } else if c == '.' && self.peek_next().is_some_and(|d| d.is_ascii_digit()) {
+                self.advance();
+                number.push(c);
+                // safe unwrap because we check in self.peek_next
+                number.push(self.advance().unwrap());
+            } else {
                 break;
             }
         }
         match number.parse::<f64>() {
-            Ok(num) => {
-                self.add_token(TokenType::Number(num));
-                Ok(())
-            }
-            Err(_) => Err(TokenError::InvalidNumber(number, self.line).into()),
+            Ok(num) => self.add_token(TokenType::Number(num)),
+            Err(_) => Err(TokenError::InvalidNumber(number, self.line)),
         }
     }
 
@@ -205,8 +209,7 @@ impl Scanner {
             "while" => TokenType::While,
             _ => TokenType::Identifier(identifier),
         };
-        self.add_token(token_type);
-        Ok(())
+        self.add_token(token_type)
     }
 
     fn skip_oneline_comment(&mut self) -> TokenResult<()> {
@@ -225,14 +228,15 @@ impl Scanner {
                 return Ok(());
             } else if c == '\n' {
                 self.line += 1;
-            }         
+            }
         }
-        return Err(TokenError::UnterminatedComment(self.line).into());
+        Err(TokenError::UnterminatedComment(self.line))
     }
 
-    fn add_token(&mut self, kind: TokenType) {
+    fn add_token(&mut self, kind: TokenType) -> TokenResult<()> {
         let text = self.source[self.start..self.current].iter().collect();
         self.tokens.push(Token::new(kind, text, self.line));
+        Ok(())
     }
 }
 
@@ -385,8 +389,18 @@ mod tests {
     #[test]
     fn test_unexpected_char() {
         let string = String::from("chocolate || mint");
-        let expected_err = vec![TokenError::UnexpectedCharacter('|', 1), TokenError::UnexpectedCharacter('|', 1)];
-        let expected_tok = vec![token(TokenType::Identifier(String::from("chocolate")), "chocolate", 1), token(TokenType::Identifier(String::from("mint")), "mint", 1)];
+        let expected_err = vec![
+            TokenError::UnexpectedCharacter('|', 1),
+            TokenError::UnexpectedCharacter('|', 1),
+        ];
+        let expected_tok = vec![
+            token(
+                TokenType::Identifier(String::from("chocolate")),
+                "chocolate",
+                1,
+            ),
+            token(TokenType::Identifier(String::from("mint")), "mint", 1),
+        ];
         let mut string_scanner = Scanner::new(string);
         assert_eq!(string_scanner.scan_tokens().0, expected_tok);
         assert_eq!(string_scanner.scan_tokens().1, expected_err);
@@ -396,7 +410,11 @@ mod tests {
     fn test_malformed_float() {
         let string = String::from("1.foo");
         let expected_err: Vec<TokenError> = Vec::new();
-        let expected_tok = vec![token(TokenType::Number(1.0), "1", 1), token(TokenType::Dot, ".", 1), token(TokenType::Identifier(String::from("foo")), "foo", 1)];
+        let expected_tok = vec![
+            token(TokenType::Number(1.0), "1", 1),
+            token(TokenType::Dot, ".", 1),
+            token(TokenType::Identifier(String::from("foo")), "foo", 1),
+        ];
         let mut string_scanner = Scanner::new(string);
         assert_eq!(string_scanner.scan_tokens().0, expected_tok);
         assert_eq!(string_scanner.scan_tokens().1, expected_err);
